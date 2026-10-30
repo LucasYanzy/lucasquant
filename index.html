@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>LucasQuant — A different kind of edge.</title>
+  <meta name="description" content="LucasQuant · XE 量化研究体系。从 Alpha 的六因子市场观察，到 Beta 的条件概率研究。向下探索粒子、结构与可能。">
+  <meta property="og:title" content="LucasQuant — A different kind of edge.">
+  <meta property="og:description" content="从粒子，到视角。从数据，到判断。探索 XE Alpha、Beta、Gamma 与 Omega。">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="site/lucasquant/favicon.svg">
+  <link rel="stylesheet" href="site/lucasquant/styles.css?v=20261030-continuity-3">
+  <script src="site/lucasquant/main.js?v=20261030-continuity-3" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+  <svg class="icon-library" aria-hidden="true"><defs>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="diagonal" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6h12v12"/></symbol>
+    <symbol id="mark" viewBox="0 0 32 32"><path d="m6 6 20 20M26 6 6 26M6 16h20"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  </defs></svg>
+
+  <header class="header">
+    <div class="shell nav-bar">
+      <a class="brand" href="#top" aria-label="LucasQuant 首页"><svg aria-hidden="true"><use href="#mark"/></svg><span>LucasQuant<span class="brand-period">.</span></span></a>
+      <nav id="navigation" class="navigation" aria-label="主导航"><a href="#alpha">Alpha</a><a href="#beta">Beta</a><a href="#gamma">Gamma</a><a href="#omega">Omega</a></nav>
+      <div class="nav-actions"><a class="nav-research" href="#research">The research <svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg></a><button class="menu-button" id="menuButton" type="button" aria-expanded="false" aria-controls="navigation" aria-label="打开导航"><span></span><span></span></button></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="heroTitle">
+      <canvas id="heroCanvas" class="hero-canvas" aria-hidden="true"></canvas>
+      <div class="hero-halo" aria-hidden="true"></div>
+      <div class="hero-copy shell">
+        <p class="eyebrow hero-eyebrow">LUCASQUANT <span> / </span> INDEPENDENT QUANTITATIVE RESEARCH</p>
+        <h1 id="heroTitle">A different<br>kind of <span>edge.</span></h1>
+        <p class="hero-description">市场的复杂，值得更深一层的理解。</p>
+        <a class="hero-explore" href="#alpha">探索 XE <svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></a>
+      </div>
+      <div class="hero-footer shell"><span>α <i>·</i> β <i>·</i> γ <i>·</i> ω</span><a href="#alpha">向下滚动，让细节显现 <span aria-hidden="true">↓</span></a><span>RESEARCH / NOT ASSUMPTION</span></div>
+    </section>
+
+    <section class="opening shell" aria-label="XE 产品体系介绍">
+      <p class="eyebrow" data-reveal>THE XE SERIES</p>
+      <p class="opening-statement" data-reveal>每一个微小的信号，<br>都可能改变<span>看待市场的方式。</span></p>
+      <p class="opening-note" data-reveal>从粒子到结构，从观察到推断。<br>四个名字，一个不断深入的研究体系。</p>
+      <div class="series-index" data-reveal><a href="#alpha"><span>α</span>Alpha<small>市场观察</small></a><a href="#beta"><span>β</span>Beta<small>概率研究</small></a><a href="#gamma"><span>γ</span>Gamma<small>周期研究</small></a><a href="#omega"><span>ω</span>Omega<small>未来计划</small></a></div>
+    </section>
+
+    <section class="scroll-chapter alpha-chapter" id="alpha" data-scene="alpha" aria-labelledby="alphaTitle">
+      <div class="chapter-stage">
+        <canvas class="scene-canvas" aria-hidden="true"></canvas>
+        <div class="scene-vignette" aria-hidden="true"></div>
+        <div class="chapter-top shell"><span class="chapter-name"><b>α</b> XE Alpha</span><span>01 / THE ALPHA PARTICLE</span><span class="chapter-status">TradingView 指标</span></div>
+        <div class="chapter-watermark" aria-hidden="true">Alpha.</div>
+        <div class="chapter-intro shell">
+          <div class="scene-copy"><p class="eyebrow">ORDER FROM NOISE</p><h2 id="alphaTitle">聚合信号。<br><span>看清全貌。</span></h2><p class="scene-description">六组因子，各自表达。<br>情绪、趋势与风险，在同一视角中变得清晰。</p><p class="scene-continue"><span></span> 继续向下，进入细节</p></div>
+        </div>
+        <div class="chapter-detail shell">
+          <div class="scene-copy"><p class="eyebrow">XE ALPHA / THE OBSERVATION LAYER</p><h3>拆开来看。<br><span>合起来理解。</span></h3><p class="detail-description">同类信号先分组，再合成为市场读数。<br>选择一个因子，看看它回答的问题。</p>
+            <div class="factor-controls" role="group" aria-label="选择 Alpha 因子"><button type="button" data-factor="0" aria-pressed="true">价格偏离</button><button type="button" data-factor="1" aria-pressed="false">资金流</button><button type="button" data-factor="2" aria-pressed="false">趋势效率</button><button type="button" data-factor="3" aria-pressed="false">风险波动</button><button type="button" data-factor="4" aria-pressed="false">趋势结构</button><button type="button" data-factor="5" aria-pressed="false">情绪动量</button></div>
+            <p class="factor-readout" id="factorReadout" aria-live="polite">价格距离相对均值有多远？偏离本身，不代表反转。</p>
+            <div class="detail-actions"><button class="button button-light" type="button" data-learn="alpha">探索 Alpha <svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg></button><button class="learn-more" type="button" data-learn="alpha">进一步了解 <svg class="icon" aria-hidden="true"><use href="#plus"/></svg></button></div>
+          </div>
+          <div class="object-label alpha-object-label" aria-hidden="true"><span>06 FACTOR PERSPECTIVES</span><small>DECOMPOSE → NORMALIZE → OBSERVE</small></div>
+        </div>
+        <div class="chapter-bottom shell"><span>MARKET CONTEXT, IN FOCUS.</span><div class="chapter-progress" aria-hidden="true"><i></i></div><span>粒子与因子关系为视觉隐喻</span></div>
+      </div>
+    </section>
+
+    <section class="chapter-bridge shell" aria-label="Alpha 与 Beta 的不同视角"><p data-reveal>理解<span>现在。</span></p><p data-reveal>再研究<span>可能。</span></p><span class="bridge-rule" aria-hidden="true"></span></section>
+
+    <section class="scroll-chapter beta-chapter" id="beta" data-scene="beta" aria-labelledby="betaTitle">
+      <div class="chapter-stage">
+        <canvas class="scene-canvas" aria-hidden="true"></canvas><div class="scene-vignette" aria-hidden="true"></div>
+        <div class="chapter-top shell"><span class="chapter-name"><b>β</b> XE Beta</span><span>02 / THE BETA PARTICLE</span><span class="chapter-status">早期研究</span></div>
+        <div class="chapter-watermark" aria-hidden="true">Beta.</div>
+        <div class="chapter-intro shell"><div class="scene-copy"><p class="eyebrow">THE SHAPE OF POSSIBILITY</p><h2 id="betaTitle">一个信号。<br><span>不止一种可能。</span></h2><p class="scene-description">同一个指标，在不同类型的股票上，<br>意味着什么？从历史关联，探索条件概率。</p><p class="scene-continue"><span></span> 继续向下，看见可能的形状</p></div></div>
+        <div class="chapter-detail shell"><div class="scene-copy"><p class="eyebrow">XE BETA / CONDITIONAL PROBABILITY</p><h3>给概率，<br><span>一个具体的前提。</span></h3><p class="detail-description">股票类型 × 指标状态 → 后续结果分布。<br>改变条件，也就改变了研究的问题。</p>
+          <div class="type-controls" role="group" aria-label="选择 Beta 概念演示股票类型"><button type="button" data-type="growth" aria-pressed="true">成长型</button><button type="button" data-type="defensive" aria-pressed="false">防御型</button><button type="button" data-type="cyclical" aria-pressed="false">周期型</button></div>
+          <div class="probability-formula"><span>P</span><span>( R<sub>t+h</sub> &gt; 0 <i>|</i> C, I<sub>t</sub> )</span></div><p class="type-readout" id="typeReadout" aria-live="polite">成长型 · 在相似指标条件下，研究后续结果的差异。</p>
+          <div class="detail-actions"><button class="button button-light" type="button" data-learn="beta">探索 Beta <svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg></button><button class="learn-more" type="button" data-learn="beta">进一步了解 <svg class="icon" aria-hidden="true"><use href="#plus"/></svg></button></div>
+        </div><div class="object-label beta-object-label" aria-hidden="true"><span>CONDITIONAL DISTRIBUTION</span><small>研究概念示意 / 非市场样本</small></div></div>
+        <div class="chapter-bottom shell"><span>LESS CERTAINTY. MORE UNDERSTANDING.</span><div class="chapter-progress" aria-hidden="true"><i></i></div><span>早期研究 · 不代表预测能力</span></div>
+      </div>
+    </section>
+
+    <section class="future-intro shell"><p class="eyebrow" data-reveal>BEYOND THE PARTICLE</p><h2 data-reveal>探索，<span>继续向前。</span></h2></section>
+
+    <section class="scroll-chapter gamma-chapter future-chapter" id="gamma" data-scene="gamma" aria-labelledby="gammaTitle"><div class="chapter-stage"><canvas class="scene-canvas" aria-hidden="true"></canvas><div class="scene-vignette" aria-hidden="true"></div><div class="chapter-top shell"><span class="chapter-name"><b>γ</b> XE Gamma</span><span>03 / THE GAMMA RAY</span><span class="chapter-status">周期研究 · 未来计划</span></div><div class="chapter-watermark" aria-hidden="true">Gamma.</div><div class="chapter-intro shell"><div class="scene-copy"><p class="eyebrow">THE RHYTHM OF MARKETS</p><h2 id="gammaTitle">起伏之间。<br><span>理解周期。</span></h2><p class="scene-description">以周期为研究方向，<br>探索市场在不同时间尺度下的节奏。</p><p class="future-note">研究方向已确定，产品细节与开放时间待公布。</p><a class="text-link" href="#omega">继续探索 <svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></a></div></div><div class="chapter-bottom shell"><span>γ / CYCLE RESEARCH</span><div class="chapter-progress" aria-hidden="true"><i></i></div><span>周期波形为概念示意</span></div></div></section>
+
+    <section class="scroll-chapter omega-chapter future-chapter" id="omega" data-scene="omega" aria-labelledby="omegaTitle"><div class="chapter-stage"><canvas class="scene-canvas" aria-hidden="true"></canvas><div class="scene-vignette" aria-hidden="true"></div><div class="chapter-top shell"><span class="chapter-name"><b>ω</b> XE Omega</span><span>04 / THE OPEN QUESTION</span><span class="chapter-status">未来计划</span></div><div class="chapter-watermark" aria-hidden="true">Omega.</div><div class="chapter-intro shell"><div class="scene-copy"><p class="eyebrow">THE HORIZON IS OPEN</p><h2 id="omegaTitle">下一种可能。<br><span>尚待定义。</span></h2><p class="scene-description">为还没有答案的问题，<br>留下一片开放的空间。</p><p class="future-note">Omega · 产品方向与视觉形态持续探索中。</p><a class="text-link" href="#research">关于 LucasQuant <svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></a></div></div><div class="chapter-bottom shell"><span>ω / AN OPEN HORIZON</span><div class="chapter-progress" aria-hidden="true"><i></i></div><span>TO BE DEFINED</span></div></div></section>
+
+    <section class="research shell" id="research" aria-labelledby="researchTitle"><p class="eyebrow" data-reveal>THE THINKING BEHIND XE</p><h2 id="researchTitle" data-reveal>保持好奇。<br><span>也保持求证。</span></h2><div class="research-body" data-reveal><p>LucasQuant 是 XE 产品体系背后的独立量化研究品牌。我们关注市场的结构、关联与不确定性，把研究转化为清楚的观察视角与可检验的问题。</p><p>Alpha 观察市场状态，Beta 探索条件概率，Gamma 研究周期。相关性需要检验，概率保留不确定性，每个产品都明确自己的边界。</p></div><div class="research-links" data-reveal><button class="text-link" type="button" data-learn="alpha">Alpha 的研究方法 <svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg></button><button class="text-link" type="button" data-learn="beta">Beta 的研究进展 <svg class="icon" aria-hidden="true"><use href="#diagonal"/></svg></button></div><p class="research-wordmark" aria-hidden="true">LucasQuant<span>.</span></p></section>
+  </main>
+
+  <footer class="footer shell"><div><a href="#top" class="footer-brand">LucasQuant.</a><nav aria-label="页脚产品导航"><a href="#alpha">Alpha</a><a href="#beta">Beta</a><a href="#gamma">Gamma</a><a href="#omega">Omega</a><a href="#top">回到顶部 ↑</a></nav></div><div class="footer-bottom"><span>© 2026 LucasQuant / XE</span><p>独立量化研究与市场观察工具。研究信息不构成投资建议。</p><span>BUILT ON QUESTIONS.</span></div></footer>
+
+  <dialog id="detailDialog" class="detail-dialog" aria-labelledby="dialogTitle"><button class="dialog-close" type="button" aria-label="关闭产品详情">×</button><div class="dialog-content"><p class="eyebrow" id="dialogEyebrow"></p><h2 id="dialogTitle"></h2><p id="dialogDescription"></p><div id="dialogRows" class="dialog-rows"></div><p class="dialog-footnote" id="dialogFootnote"></p></div></dialog>
+</body>
+</html>
