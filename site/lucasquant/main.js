@@ -4,14 +4,22 @@
   const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
   const mix = (a, b, progress) => a + (b - a) * progress;
   const smooth = (start, end, value) => { const t = clamp((value - start) / (end - start)); return t * t * t * (t * (t * 6 - 15) + 10); };
-  const damp = (value, target, response, dt) => Math.abs(value - target) < .00001 ? target : mix(value, target, 1 - Math.exp(-dt / response));
+  const damp = (value, target, response, dt) => {
+    const next = mix(value, target, 1 - Math.exp(-dt / response));
+    return Math.abs(next - target) < .0001 ? target : next;
+  };
   const tau = Math.PI * 2;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const compactHeight = matchMedia('(max-height: 519px)');
+  const staticComposition = () => reduced.matches;
+  const readingFlow = () => !document.body.classList.contains('motion-ready');
   const mobile = () => innerWidth <= 650;
   let selectedFactor = 0, selectedType = 'growth';
   const factorWeights = [1, 0, 0, 0, 0, 0];
   const typeWidths = { growth: .85, defensive: .59, cyclical: 1.1 };
   let distributionWidth = typeWidths.growth;
+  let motionPaused = false;
+  let fieldMode = 'flow', fieldMorph = 0;
   let schedule = () => {};
   const updateReadout = (element, text) => {
     element.getAnimations().forEach(animation => animation.cancel());
@@ -22,6 +30,30 @@
   // Navigation follows the document's scroll; it never captures wheel or touch events.
   const menu = document.getElementById('menuButton');
   const navigation = document.getElementById('navigation');
+  const headerElement = document.querySelector('.header');
+  const navIndicator = document.createElement('span');
+  navIndicator.className = 'nav-indicator'; navIndicator.setAttribute('aria-hidden', 'true');
+  navigation.append(navIndicator);
+  const typeControls = document.querySelector('.type-controls');
+  const typeIndicator = document.createElement('span');
+  typeIndicator.className = 'type-indicator'; typeIndicator.setAttribute('aria-hidden', 'true');
+  typeControls.append(typeIndicator);
+  const moveIndicator = (container, item, prefix) => {
+    container.style.setProperty(`--${prefix}-opacity`, item ? '1' : '0');
+    if (!item) return;
+    container.style.setProperty(`--${prefix}-x`, `${item.offsetLeft}px`);
+    container.style.setProperty(`--${prefix}-width`, `${item.offsetWidth}px`);
+  };
+  const syncIndicators = () => {
+    moveIndicator(navigation, navigation.querySelector('a[aria-current]'), 'nav');
+    moveIndicator(typeControls, typeControls.querySelector('[aria-pressed="true"]'), 'type');
+  };
+  navigation.querySelectorAll('a').forEach(link => {
+    link.addEventListener('pointerenter', () => moveIndicator(navigation, link, 'nav'));
+    link.addEventListener('focus', () => moveIndicator(navigation, link, 'nav'));
+  });
+  navigation.addEventListener('pointerleave', syncIndicators);
+  navigation.addEventListener('focusout', event => { if (!navigation.contains(event.relatedTarget)) syncIndicators(); });
   const closeMenu = (restoreFocus = false) => {
     const wasOpen = menu.getAttribute('aria-expanded') === 'true';
     document.body.classList.remove('nav-open');
@@ -75,6 +107,9 @@
   document.querySelectorAll('[data-factor]').forEach(button => {
     button.addEventListener('click', () => {
       selectedFactor = Number(button.dataset.factor);
+      // Preview never changes the explicitly selected view or its description.
+      const alpha = scenes.find(scene => scene.kind === 'alpha');
+      if (alpha) alpha.hoverFactor = -1;
       document.querySelectorAll('[data-factor]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
       updateReadout(document.getElementById('factorReadout'), factorDescriptions[selectedFactor]);
       schedule(true);
@@ -85,8 +120,32 @@
     button.addEventListener('click', () => {
       selectedType = button.dataset.type;
       document.querySelectorAll('[data-type]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      moveIndicator(typeControls, button, 'type');
       updateReadout(document.getElementById('typeReadout'), `${typeNames[selectedType]} · 切换研究分组，观察相同指标条件下的结果分布（概念示意）。`);
       schedule(true);
+    });
+  });
+  const fieldConsole = document.getElementById('fieldConsole');
+  const heroCopy = document.querySelector('.hero-copy');
+  const heroFooter = document.querySelector('.hero-footer');
+  document.querySelectorAll('[data-field]').forEach(button => {
+    button.addEventListener('click', () => {
+      fieldMode = button.dataset.field;
+      document.querySelectorAll('[data-field]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+      updateReadout(document.getElementById('fieldReadout'), fieldMode === 'focus' ? '从细微的信号，看见整体的结构。' : '微小的变化，连成更大的图景。');
+      schedule();
+    });
+  });
+  // Arrow navigation supplements the existing Tab and Enter controls.
+  ['.factor-controls', '.type-controls', '.field-controls'].forEach(selector => {
+    const group = document.querySelector(selector);
+    group.addEventListener('keydown', event => {
+      const buttons = [...group.querySelectorAll('button')];
+      const index = buttons.indexOf(document.activeElement);
+      if (index < 0 || !['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + buttons.length) % buttons.length;
+      buttons[next].focus({ preventScroll: true }); buttons[next].click();
     });
   });
 
@@ -174,7 +233,7 @@
     return () => { seed |= 0; seed = seed + 0x6d2b79f5 | 0; let value = Math.imul(seed ^ seed >>> 15, 1 | seed); value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value; return ((value ^ value >>> 14) >>> 0) / 4294967296; };
   }
   const random = randomGenerator(184729);
-  const particleCount = 4800;
+  const particleCount = 6400;
   const points = Array.from({ length: particleCount }, (_, index) => {
     const z = 1 - 2 * (index + .5) / particleCount;
     const angle = index * 2.399963229728653;
@@ -187,7 +246,7 @@
     };
   });
   const sources = [
-    { kind: 'hero', element: document.getElementById('top'), canvas: document.getElementById('heroCanvas') },
+    { kind: 'hero', element: document.getElementById('top'), canvas: document.getElementById('heroCanvas'), stage: document.querySelector('.hero-stage') },
     ...[...document.querySelectorAll('[data-scene]')].map(element => ({ kind: element.dataset.scene, element, canvas: element.querySelector('canvas'), stage: element.querySelector('.chapter-stage') }))
   ];
   const scenes = sources.map(source => ({
@@ -197,51 +256,147 @@
     detail: source.element.querySelector('.chapter-detail'),
     introItems: [...source.element.querySelectorAll('.chapter-intro .scene-copy > *')],
     detailItems: [...source.element.querySelectorAll('.chapter-detail .scene-copy > *')],
+    steps: [...source.element.querySelectorAll('[data-step-index]')],
+    pointer: { x: 0, y: 0, targetX: 0, targetY: 0, influence: 0, active: false },
+    pulses: [], ripples: [], nodes: [], hoverFactor: -1,
   })).filter(scene => scene.ctx);
   if (!scenes.length) return;
-  const heroPointer = { x: 0, y: 0, targetX: 0, targetY: 0, influence: 0, active: false };
-  const heroElement = document.getElementById('top');
-  heroElement.addEventListener('pointermove', event => {
-    if (event.pointerType !== 'mouse' || reduced.matches) return;
-    const bounds = heroElement.getBoundingClientRect();
-    heroPointer.targetX = (event.clientX - bounds.left) / bounds.width * 2 - 1;
-    heroPointer.targetY = (event.clientY - bounds.top) / bounds.height * 2 - 1;
-    heroPointer.active = true;
-  }, { passive: true });
-  heroElement.addEventListener('pointerleave', () => {
-    heroPointer.targetX = 0; heroPointer.targetY = 0; heroPointer.active = false;
+  const heroPointer = scenes[0].pointer;
+  let interactionClock = 0;
+  const factorButtons = [...document.querySelectorAll('[data-factor]')];
+  const hitFactor = (scene, x, y) => {
+    if (scene.kind !== 'alpha' || !staticComposition() && scene.progress <= .74) return -1;
+    const label = scene.nodes.findIndex(node => node.label && x >= node.label.left && x <= node.label.right && y >= node.label.top && y <= node.label.bottom);
+    if (label >= 0) return label;
+    let nearest = mobile() ? 12 : 9, factor = -1;
+    scene.nodes.forEach((node,index) => {
+      const samples = node.samples || [];
+      for (let segment = 1; segment < samples.length; segment++) {
+        const a = samples[segment - 1], b = samples[segment];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const t = clamp(((x - a.x) * dx + (y - a.y) * dy) / Math.max(.000001,dx * dx + dy * dy));
+        const distance = Math.hypot(x - mix(a.x,b.x,t),y - mix(a.y,b.y,t)) + Math.max(0,mix(a.z,b.z,t)) * 2;
+        if (distance < nearest) { nearest = distance; factor = index; }
+      }
+    });
+    return factor;
+  };
+  scenes.forEach(scene => {
+    let press = null;
+    const coordinates = event => {
+      const bounds = scene.canvas.getBoundingClientRect();
+      return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    };
+    scene.stage.addEventListener('pointermove', event => {
+      if (event.pointerType !== 'mouse') return;
+      const { x, y } = coordinates(event);
+      const overControl = !!event.target.closest('a,button');
+      scene.pointer.targetX = x / Math.max(1, scene.width) * 2 - 1;
+      scene.pointer.targetY = y / Math.max(1, scene.height) * 2 - 1;
+      scene.pointer.active = !overControl;
+      scene.hoverFactor = overControl ? -1 : hitFactor(scene, x, y);
+      scene.stage.dataset.nodeHover = String(scene.hoverFactor >= 0);
+      schedule();
+    }, { passive: true });
+    const releasePointer = () => {
+      scene.pointer.targetX = 0; scene.pointer.targetY = 0; scene.pointer.active = false;
+      scene.hoverFactor = -1; scene.stage.dataset.nodeHover = 'false'; press = null; schedule();
+    };
+    scene.stage.addEventListener('pointerleave', releasePointer);
+    scene.stage.addEventListener('pointercancel', releasePointer);
+    scene.stage.addEventListener('pointerdown', event => {
+      if (!event.isPrimary || event.button !== 0 || event.target.closest('a,button')) return;
+      press = { ...coordinates(event), id: event.pointerId, time: performance.now() };
+    }, { passive: true });
+    scene.stage.addEventListener('pointerup', event => {
+      if (!press || press.id !== event.pointerId) return;
+      const { x, y } = coordinates(event);
+      const isTap = Math.hypot(x - press.x, y - press.y) < 12 && performance.now() - press.time < 650;
+      press = null;
+      if (!isTap || event.target.closest('a,button')) return;
+      const factor = hitFactor(scene, x, y);
+      if (factor >= 0) factorButtons[factor].click();
+      if (!reduced.matches) {
+        scene.pulses.push({ x: x / scene.width, y: y / scene.height, start: interactionClock });
+        if (scene.pulses.length > 3) scene.pulses.shift();
+      }
+      schedule();
+    }, { passive: true });
   });
+  if (matchMedia('(pointer:coarse)').matches) document.getElementById('fieldHint').textContent = '轻触粒子 · 激起涟漪';
   let frame = 0, dirty = true, snapProgress = true, clock = 0, lastFrame = 0;
+  let layoutDirty = true, headerHeight = 70;
+  const motionToggle = document.getElementById('motionToggle');
+  motionToggle.addEventListener('click', () => {
+    motionPaused = !motionPaused;
+    motionToggle.setAttribute('aria-pressed', String(motionPaused));
+    motionToggle.setAttribute('aria-label', motionPaused ? '继续自动动态' : '暂停自动动态');
+    motionToggle.querySelector('.motion-toggle-label').textContent = motionPaused ? '继续动态' : '暂停动态';
+    schedule(true);
+  });
+  document.querySelectorAll('[data-seek]').forEach(button => button.addEventListener('click', () => {
+    const [kind, progress] = button.dataset.seek.split(':');
+    const scene = scenes.find(item => item.kind === kind);
+    if (!scene) return;
+    const top = scene.start - headerHeight + scene.travel * Number(progress);
+    window.scrollTo({ top, behavior: reduced.matches ? 'instant' : 'smooth' });
+  }));
   const syncMotion = () => {
-    document.body.classList.toggle('motion-ready', !reduced.matches);
+    document.body.classList.toggle('motion-ready', !reduced.matches && !compactHeight.matches);
     scenes.forEach(scene => { scene.appliedProgress = null; });
     if (reduced.matches) document.querySelectorAll('[data-reveal]').forEach(element => element.classList.add('revealed'));
     resize();
   };
   const setSize = scene => {
     const bounds = scene.canvas.getBoundingClientRect();
-    scene.width = bounds.width; scene.height = bounds.height;
-    const dpr = Math.min(devicePixelRatio || 1, mobile() ? 1.75 : 2);
-    scene.canvas.width = Math.round(bounds.width * dpr); scene.canvas.height = Math.round(bounds.height * dpr);
-    scene.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const dpr = Math.min(devicePixelRatio || 1, mobile() ? 1.5 : 1.75);
+    if (scene.width !== bounds.width || scene.height !== bounds.height || scene.dpr !== dpr) {
+      scene.width = bounds.width; scene.height = bounds.height; scene.dpr = dpr;
+      scene.canvas.width = Math.round(bounds.width * dpr); scene.canvas.height = Math.round(bounds.height * dpr);
+      scene.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     const detailCopy = scene.element.querySelector('.chapter-detail .scene-copy');
     scene.detailBottom = detailCopy ? detailCopy.offsetTop + detailCopy.offsetHeight + 22 : 0;
+    if (scene.kind === 'hero') {
+      const ceiling = heroCopy.offsetTop + heroCopy.offsetHeight + 14;
+      const floor = fieldConsole.offsetTop - 19;
+      scene.focusY = (ceiling + floor) / 2 / Math.max(1,scene.height);
+      scene.focusScale = Math.max(55,Math.min(scene.width * .30,(floor - ceiling) * .43));
+    }
   };
   function resize() {
     scenes.forEach(setSize);
-    snapProgress = true;
+    syncIndicators();
+    layoutDirty = true;
     schedule(true);
   }
+  function measureLayout() {
+    headerHeight = headerElement.offsetHeight;
+    scenes.forEach(scene => {
+      scene.start = scene.element.getBoundingClientRect().top + scrollY;
+      scene.total = scene.element.offsetHeight;
+      scene.travel = Math.max(1, scene.total - scene.stage.offsetHeight);
+      scene.artStart = scene.canvas.getBoundingClientRect().top + scrollY;
+    });
+    layoutDirty = false;
+  }
   function updateScroll() {
-    const header = document.querySelector('.header').offsetHeight;
+    if (layoutDirty) measureLayout();
+    const header = headerHeight;
     const pageHeight = innerHeight;
     let current = '';
     for (const scene of scenes) {
-      const bounds = scene.element.getBoundingClientRect();
+      const bounds = { top: scene.start - scrollY, bottom: scene.start + scene.total - scrollY };
       const wasActive = scene.active;
       scene.active = bounds.top < pageHeight && bounds.bottom > header;
       scene.targetEntrance = smooth(0, .75, (pageHeight - bounds.top) / Math.max(1, pageHeight - header));
-      scene.targetProgress = scene.kind === 'hero' ? clamp((header - bounds.top) / bounds.height) : clamp((header - bounds.top) / Math.max(1, bounds.height - scene.stage.offsetHeight));
+      scene.targetProgress = clamp((header - bounds.top) / scene.travel);
+      if (readingFlow() && !reduced.matches) {
+        // Short windows retain a readable document and scrub the artwork as it crosses the viewport.
+        scene.targetProgress = scene.kind === 'hero'
+          ? clamp((header - bounds.top) / Math.max(1,scene.total - (pageHeight - header)))
+          : clamp((scrollY + pageHeight * .85 - scene.artStart) / (pageHeight * .70 + scene.height * .65));
+      }
       // A deep link or a resized viewport starts at its actual position. Normal scrolling is damped.
       if (snapProgress || !scene.measured || !wasActive || reduced.matches) {
         scene.progress = scene.targetProgress;
@@ -251,10 +406,13 @@
       if (scene.kind !== 'hero' && bounds.top <= pageHeight * .45 && bounds.bottom > pageHeight * .45) current = scene.kind;
     }
     snapProgress = false;
+    headerElement.style.setProperty('--reading-progress', clamp(scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight)).toFixed(5));
+    headerElement.dataset.scrolled = String(scrollY > 30);
     navigation.querySelectorAll('a').forEach(link => {
       if (link.hash === `#${current}`) link.setAttribute('aria-current', 'location');
       else link.removeAttribute('aria-current');
     });
+    syncIndicators();
   }
   function applyChapter(scene) {
     const p = scene.progress;
@@ -262,34 +420,40 @@
     const element = scene.element;
     const set = (name, value) => element.style.setProperty(name, value);
     set('--progress', p.toFixed(4));
-    set('--art-opacity', mix(.3, 1, scene.entrance).toFixed(4));
-    set('--detail-visibility', p > .385 ? 'visible' : 'hidden');
-    set('--object-opacity', smooth(.74, .90, p).toFixed(4));
-    set('--word-opacity', mix(.8, .26, smooth(.28, .83, p)).toFixed(4));
+    set('--art-opacity', mix(.48, 1, scene.entrance).toFixed(4));
+    set('--detail-visibility', p > .60 ? 'visible' : 'hidden');
+    set('--object-opacity', smooth(.76, .88, p).toFixed(4));
+    set('--cue-opacity', (smooth(.43, .49, p) * (1 - smooth(.55, .61, p))).toFixed(4));
+    set('--word-opacity', mix(.7, .15, smooth(.23, .73, p)).toFixed(4));
     set('--word-x', `${-smooth(0, 1, p) * 15}px`);
-    element.dataset.phase = future ? 'future' : p < .32 ? 'gather' : p < .74 ? 'reveal' : 'detail';
+    element.dataset.phase = future ? 'future' : p < .30 ? 'gather' : p < .70 ? 'reveal' : 'detail';
     element.dataset.progress = p.toFixed(4);
     element.dataset.targetProgress = scene.targetProgress.toFixed(4);
-    const staticMode = reduced.matches;
+    const staticMode = readingFlow();
     scene.introItems.forEach((item, index) => {
-      const exit = future || staticMode ? 0 : smooth(.31 + index * .014, .44 + index * .014, p);
+      const exit = future || staticMode ? 0 : smooth(.26 + index * .012, .37 + index * .012, p);
       item.style.setProperty('--item-opacity', (1 - exit).toFixed(4));
       item.style.setProperty('--item-y', `${-exit * (12 + index * 2)}px`);
     });
     scene.detailItems.forEach((item, index) => {
-      const enter = staticMode ? 1 : smooth(.39 + index * .014, .51 + index * .014, p);
+      const enter = staticMode ? 1 : smooth(.60 + index * .010, .70 + index * .010, p);
       item.style.setProperty('--item-opacity', enter.toFixed(4));
       item.style.setProperty('--item-y', `${(1 - enter) * 18}px`);
       item.inert = !staticMode && enter < .12;
     });
-    const introHidden = !staticMode && !future && p > .50;
+    const introHidden = !staticMode && !future && p > .43;
     scene.intro.inert = introHidden;
     scene.intro.setAttribute('aria-hidden', String(introHidden));
     if (scene.detail) {
-      const detailHidden = !staticMode && p < .39;
+      const detailHidden = !staticMode && p < .60;
       scene.detail.inert = detailHidden;
       scene.detail.setAttribute('aria-hidden', String(detailHidden));
     }
+    const step = p < .30 ? 0 : p < .70 ? 1 : 2;
+    scene.steps.forEach((button, index) => {
+      if (index === step) button.setAttribute('aria-current', 'step');
+      else button.removeAttribute('aria-current');
+    });
   }
   function camera(scene, x, y, z, centerX, centerY, scale) {
     const perspective = 4.4 / (4.4 + z);
@@ -300,8 +464,8 @@
     const staticLayout = !document.body.classList.contains('motion-ready');
     if (compact && staticLayout) return { x: .5, y: .47, scale: Math.min(scene.width * .28, scene.height * .32) };
     const base = {
-      x: compact ? .51 : .715, y: compact ? .67 : .50,
-      scale: Math.min(scene.width * (compact ? .34 : .175), scene.height * (compact ? .25 : .315)),
+      x: (compact ? .51 : .715) + scene.pointer.x * .008, y: (compact ? .67 : .50) + scene.pointer.y * .006,
+      scale: Math.min(scene.width * (compact ? .34 : .20), scene.height * (compact ? .25 : .36)),
     };
     if (!compact) return base;
     const top = Math.max(scene.detailBottom, scene.height * .48);
@@ -319,160 +483,403 @@
     glow.addColorStop(0, `rgba(${tint},${opacity})`); glow.addColorStop(.5, `rgba(${tint},${opacity * .4})`); glow.addColorStop(1, `rgba(${tint},0)`);
     ctx.fillStyle = glow; ctx.fillRect(0, 0, width, height);
   }
+  const inkCache = new Map();
+  function ink(color, opacity) {
+    let palette = inkCache.get(color);
+    if (!palette) { palette = Array.from({ length: 65 }, (_, index) => `rgba(${color},${index / 64})`); inkCache.set(color, palette); }
+    // Interpolated factor colors are quantized below; keep the cache bounded on long visits.
+    if (inkCache.size > 160) inkCache.delete(inkCache.keys().next().value);
+    return palette[Math.round(clamp(opacity) * 64)];
+  }
   function dot(ctx, x, y, size, opacity, color = '218,220,231') {
-    ctx.fillStyle = `rgba(${color},${clamp(opacity).toFixed(3)})`;
-    ctx.fillRect(x - size / 2, y - size / 2, size, size);
+    ctx.fillStyle = ink(color, opacity);
+    if (size < 1.6) ctx.fillRect(x - size / 2, y - size / 2, size, size);
+    else { ctx.beginPath(); ctx.arc(x,y,size / 2,0,tau); ctx.fill(); }
+  }
+  function interact(scene, x, y) {
+    const pointer = scene.pointer;
+    let ox = 0, oy = 0, light = 0;
+    if (pointer.influence > .001 && !reduced.matches) {
+      const dx = x - (pointer.x + 1) * scene.width / 2, dy = y - (pointer.y + 1) * scene.height / 2;
+      const field = Math.exp(-(dx * dx + dy * dy) / (mobile() ? 8500 : 22000)) * pointer.influence;
+      ox += dx * field * .14; oy += dy * field * .14; light += field * .30;
+    }
+    for (const ripple of scene.ripples) {
+      const dx = x - ripple.x, dy = y - ripple.y;
+      const distance = Math.hypot(dx, dy);
+      const band = (distance - ripple.radius) / ripple.width;
+      if (Math.abs(band) > 3) continue;
+      const force = Math.exp(-band * band) * ripple.opacity;
+      ox += dx / Math.max(1, distance) * force * 18;
+      oy += dy / Math.max(1, distance) * force * 18;
+      light += force * .55;
+    }
+    return [x + ox, y + oy, light];
+  }
+  function drawRipples(scene) {
+    const { ctx } = scene;
+    ctx.save();
+    for (const ripple of scene.ripples) {
+      ctx.strokeStyle = ink('172,205,230', ripple.opacity * .17);
+      ctx.lineWidth = .65;
+      ctx.beginPath(); ctx.arc(ripple.x, ripple.y, ripple.radius, 0, tau); ctx.stroke();
+      ctx.strokeStyle = ink('172,205,230', ripple.opacity * .06);
+      ctx.beginPath(); ctx.arc(ripple.x, ripple.y, ripple.radius + 9, 0, tau); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function tracer(ctx, x, y, opacity, size = 1) {
+    dot(ctx, x, y, 11 * size, opacity * .025, '173,208,235');
+    dot(ctx, x, y, 5 * size, opacity * .10, '190,221,244');
+    dot(ctx, x, y, 1.5 * size, opacity, '238,248,255');
+  }
+  // Shared curve: the fine filaments and the points belong to the same moving surface.
+  function heroSurface(u, band, cross, time, tilt) {
+    const ripple = Math.sin(u * 3 - time * .22) * .045;
+    const radius = 1.03 + band * .38 + ripple;
+    const twist = u * 2 + time * .12;
+    return [
+      Math.cos(u) * radius,
+      Math.sin(u) * radius * tilt + Math.sin(twist) * band * .52 + Math.cos(cross) * .022,
+      Math.sin(u) * .72 + Math.cos(twist) * band * .58 + Math.sin(cross) * .032,
+    ];
+  }
+  function signalRotation(x, y, z, time) {
+    const angle = .25 + time * .065;
+    const c = Math.cos(angle), s = Math.sin(angle);
+    return [x * c + z * s, y * .98 - z * .17, -x * s + z * c + y * .17];
+  }
+  function heroFilament(u, band, time, tilt) {
+    const flow = heroSurface(u,band,u * 6,time,tilt);
+    const latitude = band * Math.PI * .94;
+    const radius = Math.cos(latitude);
+    const focus = signalRotation(Math.cos(u) * radius,Math.sin(latitude),Math.sin(u) * radius,time);
+    return flow.map((value,index) => mix(value,focus[index],fieldMorph));
   }
   function drawHero(scene) {
-    const { ctx, width, height, progress } = scene;
+    const { ctx, width, height, progress: p } = scene;
     const compact = mobile();
-    const time = reduced.matches ? 0 : clock;
-    const cx = .5 + heroPointer.x * .018;
-    const cy = (compact ? .73 : height < 500 ? .81 : .75) + heroPointer.y * .012;
-    const breathe = 1 + Math.sin(time * .42) * .025;
-    const scale = Math.min(width * (compact ? .70 : .50), height * (compact ? .52 : height < 500 ? 1.02 : .55)) * breathe;
-    const tilt = (compact ? .35 : height < 500 ? .18 : .31) + Math.sin(time * .19) * .025 + heroPointer.y * .035;
-    const pointerX = (heroPointer.x + 1) * width / 2;
-    const pointerY = (heroPointer.y + 1) * height / 2;
-    atmosphere(scene, cx, cy, scale * 1.75, .075 + Math.sin(time * .42) * .007);
-    const limit = compact ? 3200 : particleCount;
-    for (let index = 0; index < limit; index++) {
-      const point = points[index];
-      const u = point.u * tau + time * (.115 + (point.v - .5) * .008);
-      const band = point.v;
-      const major = 1.04 + (band - .5) * .30 + Math.sin(u * 3 - time * .32) * .035;
-      const twist = u * 2 - time * .22;
-      let x = Math.cos(u) * major;
-      let y = Math.sin(u) * major * tilt + Math.sin(twist) * (band - .5) * .42;
-      const z = Math.sin(u) * .6 + Math.cos(twist) * (band - .5) * .55;
-      x += Math.sin(u * 3 - time * .32) * .035;
-      y += Math.sin(time * .42) * .025;
-      y += point.scatterY * progress * .10;
-      let [px, py, depth] = camera(scene, x, y, z, cx, cy, scale * (1 + progress * .15));
-      const dx = px - pointerX, dy = py - pointerY;
-      const field = Math.exp(-(dx * dx + dy * dy) / 26000) * heroPointer.influence;
-      px += dx * field * .13; py += dy * field * .13;
-      const pulse = .5 + .5 * Math.sin(u * 2 - time * .42);
-      const light = .19 + point.w * .43 + pulse * .23 + field * .18 + (depth - .8) * .2;
-      dot(ctx, px, py, (.55 + point.seed * 1.05) * depth, light, point.seed > .88 ? '239,235,248' : '172,175,197');
+    const approach = smooth(.08,.86,p), time = clock + approach * 4.8;
+    const cx = mix(.50,compact ? .50 : .61,approach) + heroPointer.x * .010;
+    const flowY = mix(compact ? .735 : .69,compact ? .70 : .50,approach);
+    const cy = mix(flowY,mix(scene.focusY,compact ? .68 : .50,approach),fieldMorph) + heroPointer.y * .008;
+    const size = Math.min(width * (compact ? .57 : .46),height * (compact ? .46 : .55));
+    const flowScale = size * mix(1,compact ? 1.12 : 1.38,approach);
+    const scale = mix(flowScale,mix(scene.focusScale,flowScale * .70,approach),fieldMorph) * (1 + Math.sin(time * .32) * .009);
+    const tilt = mix(.40,.57,approach) + Math.sin(time * .16) * .025 + heroPointer.y * .025;
+    atmosphere(scene,cx,cy,scale * 1.55,.045,[133,170,205]);
+    const gradient = ctx.createLinearGradient(width * .12,height * .28,width * .94,height * .79);
+    gradient.addColorStop(0,'#8da9c430'); gradient.addColorStop(.5,'#deedff8c'); gradient.addColorStop(1,'#8da9c433');
+    const filaments = compact ? 17 : 29;
+    ctx.save(); ctx.strokeStyle = gradient;
+    for (let line = 0; line < filaments; line++) {
+      const band = (line / (filaments - 1) - .5) * .98;
+      const edge = line === 0 || line === filaments - 1;
+      ctx.globalAlpha = (edge ? .8 : .2) * (1 - Math.sin(fieldMorph * Math.PI) * .55);
+      ctx.lineWidth = edge ? .75 : .45;
+      ctx.beginPath();
+      for (let step = 0; step <= 128; step++) {
+        const u = step / 128 * tau + time * .075;
+        const [x,y,z] = heroFilament(u,band,time,tilt);
+        const projected = camera(scene,x,y,z,cx,cy,scale);
+        const [px,py] = interact(scene,projected[0],projected[1]);
+        if (!step) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
     }
-    // The cross-current moves independently of the orbit; its endpoints fade before wrapping.
-    for (let index = 0; index < limit / 3; index++) {
-      const point = points[index];
-      const travel = (point.u + time * (.028 + point.v * .003)) % 1;
-      const x = (travel - .5) * 3.4;
-      const y = .15 * Math.sin(x * 2.3 - time * .3) + (point.v - .5) * .12 - .06;
-      const [px, py] = camera(scene, x, y, (point.w - .5) * .2, cx, cy, scale);
-      const fade = Math.sin(travel * Math.PI) ** .65;
-      dot(ctx, px, py, point.seed > .9 ? 1.4 : .7, fade * (.12 + point.seed * .46), '207,205,223');
+    ctx.restore();
+    // Depth buckets preserve front/back light without sorting thousands of objects per frame.
+    if (!scene.heroBuffer) {
+      scene.heroBuffer = new Float32Array(particleCount * 6);
+      scene.depthBuckets = Array.from({length:8},() => []);
+    }
+    scene.depthBuckets.forEach(bucket => { bucket.length = 0; });
+    const limit = compact ? 3800 : particleCount;
+    const data = scene.heroBuffer;
+    for (let index = 0; index < limit; index++) {
+      const point = points[Math.floor(index * particleCount / limit)];
+      const u = point.u * tau + time * (.075 + (point.v - .5) * .005);
+      const band = point.v - .5;
+      const flow = heroSurface(u,band,point.w * tau,time,tilt);
+      const focus = signalRotation(point.x,point.y,point.z,time);
+      const x = mix(flow[0],focus[0],fieldMorph), y = mix(flow[1],focus[1],fieldMorph), z = mix(flow[2],focus[2],fieldMorph);
+      const [sx,sy,depth] = camera(scene,x,y,z,cx,cy,scale);
+      const [px,py,reflection] = interact(scene,sx,sy);
+      const front = clamp((1 - z) / 2);
+      const rim = mix(Math.pow(Math.abs(band) * 2,4),Math.pow(1 - Math.abs(z),3),fieldMorph);
+      const sweep = Math.pow(.5 + .5 * Math.cos(u - time * .19 + 1),6);
+      const offset = index * 6;
+      data[offset] = px; data[offset + 1] = py;
+      data[offset + 2] = (.42 + point.seed * .68 + front * .48) * depth;
+      data[offset + 3] = .10 + point.seed * .18 + front * .38 + rim * .23 + sweep * .14 + reflection;
+      data[offset + 4] = point.seed; data[offset + 5] = front;
+      scene.depthBuckets[Math.min(7,Math.floor(front * 8))].push(offset);
+    }
+    for (let bucket = 0; bucket < 8; bucket++) {
+      const color = bucket < 3 ? '150,176,201' : '218,232,247';
+      for (const offset of scene.depthBuckets[bucket]) {
+        const x = data[offset], y = data[offset + 1], radius = data[offset + 2], light = data[offset + 3];
+        dot(ctx,x,y,radius,light,color);
+        if (data[offset + 4] > .991 && data[offset + 5] > .56) tracer(ctx,x,y,Math.min(.92,light),.65);
+      }
+    }
+    for (let index = 0; index < 8; index++) {
+      const u = time * .14 + index / 8 * tau;
+      const [x,y,z] = heroFilament(u,(index % 3 - 1) * .35,time,tilt);
+      const [px,py] = camera(scene,x,y,z,cx,cy,scale);
+      const [ix,iy] = interact(scene,px,py);
+      tracer(ctx,ix,iy,.25 + clamp((1 - z) / 2) * .48,.7);
+    }
+    if (fieldMorph > .01) {
+      ctx.save(); ctx.globalAlpha = fieldMorph * .4; ctx.strokeStyle = '#abcce263'; ctx.lineWidth = .5;
+      const x = width * cx, y = height * cy;
+      for (let tick = 0; tick < 48; tick++) {
+        const angle = tick / 48 * tau;
+        const radius = scale * 1.22;
+        ctx.beginPath(); ctx.moveTo(x + Math.cos(angle) * radius,y + Math.sin(angle) * radius);
+        ctx.lineTo(x + Math.cos(angle) * (radius + (tick % 4 ? 3 : 7)),y + Math.sin(angle) * (radius + (tick % 4 ? 3 : 7))); ctx.stroke();
+      }
+      ctx.restore();
     }
   }
+  // Unit-sphere paths keep every factor in the same field throughout the transition.
+  // For antipodal directions, select a stable tangent instead of crossing the center.
+  function sphereArc(a, b, progress) {
+    if (progress <= 0) return a;
+    if (progress >= 1) return b;
+    const dot = clamp(a[0] * b[0] + a[1] * b[1] + a[2] * b[2],-1,1);
+    let tx = b[0] - a[0] * dot, ty = b[1] - a[1] * dot, tz = b[2] - a[2] * dot;
+    let length = Math.hypot(tx,ty,tz);
+    if (length < .000001) {
+      if (dot > 0) return a;
+      const axis = Math.abs(a[1]) < .9 ? [0,1,0] : [1,0,0];
+      tx = a[1] * axis[2] - a[2] * axis[1];
+      ty = a[2] * axis[0] - a[0] * axis[2];
+      tz = a[0] * axis[1] - a[1] * axis[0];
+      length = Math.hypot(tx,ty,tz);
+    }
+    const angle = Math.acos(dot) * progress, c = Math.cos(angle), s = Math.sin(angle) / length;
+    return [a[0] * c + tx * s,a[1] * c + ty * s,a[2] * c + tz * s];
+  }
+  function alphaBand(group, longitude, across = 0) {
+    const y = -.76 + group * .304 + across * .15;
+    const radius = Math.sqrt(Math.max(0,1 - y * y));
+    return [Math.cos(longitude) * radius,y,Math.sin(longitude) * radius];
+  }
+  function bandShoulder(group, yaw, tilt) {
+    const y = -.76 + group * .304, radius = Math.sqrt(1 - y * y);
+    // Tangent of the projected latitude: leaders stay on the right silhouette as the field rotates.
+    return yaw - Math.asin(radius * Math.cos(tilt) / (4.4 + y * Math.sin(tilt)));
+  }
+  const alphaSamples = points.map(point => {
+    const length = Math.hypot(point.x,point.y,point.z);
+    return { from:[point.x / length,point.y / length,point.z / length],to:alphaBand(point.group,point.u * tau,point.v - .5) };
+  });
   function drawAlpha(scene) {
     const { ctx } = scene;
-    const p = reduced.matches ? .82 : scene.progress;
-    const gather = smooth(.01, .30, p);
-    const explode = smooth(.40, .84, p);
-    const placement = position(scene, smooth(.38, .77, p));
-    const size = placement.scale * mix(.90, 1.09, smooth(.08, .43, p));
-    atmosphere(scene, placement.x, placement.y, size * 1.65, .055);
-    const limit = mobile() ? 3000 : particleCount;
-    const rotation = .22 + clock * .035 + p * .35;
-    const cos = Math.cos(rotation), sin = Math.sin(rotation);
-    const colors = factorWeights.map(weight => `${Math.round(mix(188,236,weight * explode))},${Math.round(mix(193,231,weight * explode))},${Math.round(mix(211,246,weight * explode))}`);
-    for (let index = 0; index < limit; index++) {
-      const point = points[index];
-      const angle = point.group / 6 * tau - Math.PI / 6;
-      const gx = Math.cos(angle) * 1.04, gy = Math.sin(angle) * .79;
-      const sphereX = point.x * cos + point.z * sin;
-      const sphereZ = -point.x * sin + point.z * cos;
-      const delay = point.seed * .025 + point.group * .002;
-      const split = smooth(.40 + delay, .80 + delay, p);
-      const arc = Math.sin(split * Math.PI) * .16;
-      const localScale = mix(1, .27, split);
-      const drift = 1 - gather;
-      const swirl = drift * .32;
-      const x = sphereX * localScale + gx * split - Math.sin(angle) * arc + (point.scatterX * Math.cos(swirl) - point.scatterY * Math.sin(swirl)) * drift * .25;
-      const y = point.y * localScale + gy * split + Math.cos(angle) * arc * .6 + (point.scatterY * Math.cos(swirl) + point.scatterX * Math.sin(swirl)) * drift * .25;
-      const z = sphereZ * localScale + (point.w - .5) * arc * .35 + point.scatterZ * drift * .20;
-      const [px, py, depth] = camera(scene, x, y, z, placement.x, placement.y, size);
-      const facing = clamp((1.2 - z) / 2.2);
-      const highlight = factorWeights[point.group];
-      const alpha = (.12 + facing * .70) * mix(1, .64 + highlight * .36, explode);
-      const pointSize = (.45 + point.seed * .75 + facing * .32) * depth * mix(1, .85 + highlight * .28, explode);
-      dot(ctx, px, py, pointSize, alpha, colors[point.group]);
-    }
-    const annotation = smooth(.74, .90, p);
-    if (annotation > .001) {
-      const centerX = scene.width * placement.x, centerY = scene.height * placement.y;
-      ctx.save();
-      ctx.globalAlpha = annotation;
-      for (let group = 0; group < 6; group++) {
-        const angle = group / 6 * tau - Math.PI / 6;
-        const x = centerX + Math.cos(angle) * size * 1.04;
-        const y = centerY + Math.sin(angle) * size * .79;
-        const highlight = factorWeights[group];
-        ctx.strokeStyle = `rgba(139,137,156,${.13 + highlight * .3})`;
-        ctx.lineWidth = .55;
-        ctx.beginPath(); ctx.moveTo(centerX, centerY); ctx.lineTo(mix(centerX, x, annotation), mix(centerY, y, annotation)); ctx.stroke();
-        const labelY = y + size * .36;
-        ctx.fillStyle = `rgba(211,207,223,${.65 + highlight * .35})`;
-        ctx.textAlign = 'center';
-        ctx.font = `${mobile() ? 8 : 10}px -apple-system,BlinkMacSystemFont,sans-serif`;
-        ctx.fillText(factorNames[group], x, labelY);
-        ctx.font = `${mobile() ? 5 : 7}px SFMono-Regular,Consolas,monospace`;
-        ctx.fillStyle = '#737383'; ctx.fillText(`x${group + 1} / FACTOR`, x, labelY + (mobile() ? 10 : 15));
+    const p = staticComposition() ? .86 : scene.progress;
+    const gather = smooth(0,.19,p), resolve = smooth(.36,.72,p);
+    const closeup = smooth(.18,.37,p) * (1 - smooth(.49,.72,p));
+    const placement = position(scene,smooth(.58,.78,p));
+    const compact = mobile();
+    placement.x = compact ? mix(placement.x,.405,resolve) : mix(placement.x,.675,resolve);
+    if (!compact) placement.x = mix(placement.x,.56,closeup);
+    const size = placement.scale * (1 + closeup * .35) * mix(1,compact ? .96 : .94,resolve);
+    const cx = scene.width * placement.x, cy = scene.height * placement.y;
+    const yaw = .23 + clock * .037 + smooth(0,.72,p) * .8;
+    const tilt = mix(.12,.38,resolve) + closeup * .18;
+    const c = Math.cos(yaw), s = Math.sin(yaw), ct = Math.cos(tilt), st = Math.sin(tilt);
+    const rotate = point => {
+      const x = point[0] * c + point[2] * s, z = -point[0] * s + point[2] * c;
+      return [x,point[1] * ct - z * st,point[1] * st + z * ct];
+    };
+    const project = point => {
+      const [x,y,z] = rotate(point);
+      const projected = camera(scene,x,y,z,placement.x,placement.y,size);
+      const [px,py,reflection] = interact(scene,projected[0],projected[1]);
+      return [px,py,z,projected[2],reflection];
+    };
+    atmosphere(scene,placement.x,placement.y,size * 1.6,.045,[160,190,218]);
+    const annotation = smooth(.70,.83,p);
+    const labelX = Math.min(cx + size * 1.15,scene.width - (compact ? 78 : 124));
+    scene.nodes = [];
+    ctx.save();
+    for (let group = 0; group < 6; group++) {
+      const weight = factorWeights[group], preview = scene.hoverFactor === group ? .22 : 0;
+      const emphasis = Math.min(1,weight + preview);
+      const samples = [];
+      // The center and two edges describe a finite band, rather than six disconnected objects.
+      for (const edge of [-.5,0,.5]) {
+        let previous = null;
+        for (let step = 0; step <= 120; step++) {
+          const u = step / 120 * tau;
+          const [x,y,z] = project(alphaBand(group,u,edge));
+          if (edge === 0 && step % 3 === 0) samples.push({x,y,z});
+          if (previous) {
+            const front = clamp((1 - z) / 2);
+            ctx.strokeStyle = ink('185,214,236',resolve * (edge === 0 ? .065 + emphasis * .25 : .03 + emphasis * .09) * (.35 + front * .65));
+            ctx.lineWidth = edge === 0 ? .65 + emphasis * .35 : .5;
+            ctx.beginPath(); ctx.moveTo(previous[0],previous[1]); ctx.lineTo(x,y); ctx.stroke();
+          }
+          previous = [x,y];
+        }
       }
+      const labelY = cy + (-.76 + group * .304) * size * .94;
+      scene.nodes.push({x:labelX + (compact ? 27 : 41),y:labelY,radius:0,label:{left:labelX - 9,right:labelX + (compact ? 68 : 100),top:labelY - (compact ? 10 : 13),bottom:labelY + (compact ? 10 : 13)},samples});
+      if (annotation > .001) {
+        const [ax,ay] = project(alphaBand(group,bandShoulder(group,yaw,tilt)));
+        const leadX = labelX - (compact ? 7 : 12);
+        ctx.globalAlpha = annotation;
+        ctx.strokeStyle = ink('180,207,228',.10 + emphasis * .26); ctx.lineWidth = .6;
+        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(leadX - 7,labelY); ctx.lineTo(leadX,labelY); ctx.stroke();
+        dot(ctx,ax,ay,1.6,.25 + emphasis * .55,'203,225,242');
+        ctx.textAlign = 'left';
+        ctx.font = `${compact ? 7 : 9}px SFMono-Regular,Consolas,monospace`;
+        ctx.fillStyle = ink('160,190,214',.58 + emphasis * .35);
+        ctx.fillText(String(group + 1).padStart(2,'0'),labelX,labelY + 3);
+        ctx.font = `${compact ? 9 : 12}px -apple-system,BlinkMacSystemFont,sans-serif`;
+        ctx.fillStyle = ink('221,234,245',.62 + emphasis * .36);
+        ctx.fillText(factorNames[group],labelX + (compact ? 17 : 24),labelY + 3);
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+    const limit = compact ? 3500 : particleCount;
+    if (!scene.alphaBuffer) { scene.alphaBuffer = new Float32Array(particleCount * 6); scene.alphaDepth = Array.from({length:8},() => []); }
+    scene.alphaDepth.forEach(bucket => { bucket.length = 0; });
+    const buffer = scene.alphaBuffer;
+    for (let index = 0; index < limit; index++) {
+      const sampleIndex = Math.floor(index * particleCount / limit), point = points[sampleIndex], path = alphaSamples[sampleIndex];
+      const delayed = smooth(.36 + point.seed * .018,.70 + point.seed * .018,p);
+      const unit = sphereArc(path.from,path.to,delayed);
+      const shell = mix(Math.hypot(point.x,point.y,point.z),.975 + point.w * .025,delayed);
+      const drift = 1 - gather;
+      const field = [unit[0] * shell + point.scatterX * drift * .26,unit[1] * shell + point.scatterY * drift * .26,unit[2] * shell + point.scatterZ * drift * .19];
+      const [x,y,z,depth,reflection] = project(field);
+      const front = clamp((1 - z) / 2);
+      const selected = factorWeights[point.group], preview = scene.hoverFactor === point.group ? .15 : 0;
+      const prominence = mix(1,.45 + selected * .55 + preview,resolve);
+      const light = (.14 + front * .46 + point.seed * .18) * prominence + reflection;
+      const offset = index * 6;
+      buffer[offset] = x; buffer[offset + 1] = y; buffer[offset + 2] = (.45 + point.seed * .6 + front * .22) * depth;
+      buffer[offset + 3] = light; buffer[offset + 4] = selected; buffer[offset + 5] = point.seed;
+      scene.alphaDepth[Math.min(7,Math.floor(front * 8))].push(offset);
+    }
+    for (let bucket = 0; bucket < 8; bucket++) {
+      for (const offset of scene.alphaDepth[bucket]) {
+        const color = buffer[offset + 4] > .5 ? '224,239,250' : '164,190,212';
+        dot(ctx,buffer[offset],buffer[offset + 1],buffer[offset + 2],buffer[offset + 3],color);
+        if (buffer[offset + 5] > .997 && bucket > 4) tracer(ctx,buffer[offset],buffer[offset + 1],buffer[offset + 3] * .6,.6);
+      }
+    }
+    if (annotation > .001) {
+      ctx.save(); ctx.globalAlpha = annotation; ctx.textAlign = 'center';
+      const captionX = compact ? scene.width * .5 : cx + size * .1;
+      const captionY = Math.min(cy + size * 1.16 + 16,scene.height - 73);
+      ctx.font = `${compact ? 9 : 11}px -apple-system,BlinkMacSystemFont,sans-serif`; ctx.fillStyle = '#b4c5d7';
+      ctx.fillText('六条信号带，六个观察视角。',captionX,captionY);
+      ctx.font = `${compact ? 7 : 9}px -apple-system,BlinkMacSystemFont,sans-serif`; ctx.fillStyle = '#6f8195';
+      ctx.fillText('分组示意 · 不表示因子数值或权重',captionX,captionY + (compact ? 15 : 21));
       ctx.restore();
     }
   }
   function drawBeta(scene) {
     const { ctx } = scene;
-    const p = reduced.matches ? .83 : scene.progress;
-    const gather = smooth(.01, .30, p);
-    const placement = position(scene, smooth(.38, .77, p));
-    const size = mobile() ? placement.scale * .96 : Math.min(placement.scale * 1.06, scene.width * .145);
-    atmosphere(scene, placement.x, placement.y, size * 1.65, .05, [184,174,215]);
+    const p = staticComposition() ? .86 : scene.progress;
+    const gather = smooth(0,.20,p), unfold = smooth(.37,.73,p);
+    const closeup = smooth(.18,.37,p) * (1 - smooth(.49,.72,p));
+    const placement = position(scene,smooth(.58,.78,p));
+    if (!mobile()) placement.x = mix(placement.x,.56,closeup);
+    const size = Math.min(placement.scale * .91,scene.width * (mobile() ? .28 : .155)) * (1 + closeup * .42);
+    atmosphere(scene,placement.x,placement.y,size * 2,.06,[200,211,235]);
     const sigma = distributionWidth;
-    const limit = mobile() ? 2700 : 4400;
+    if (unfold > .001) {
+      const [left,bottom] = camera(scene,-1.75,.53,0,placement.x,placement.y,size);
+      const gradient = ctx.createLinearGradient(0,bottom - size * 1.2,0,bottom);
+      gradient.addColorStop(0,ink('153,190,221',unfold * .095));
+      gradient.addColorStop(1,ink('153,190,221',unfold * .008));
+      ctx.fillStyle = gradient;
+      ctx.beginPath(); ctx.moveTo(left,bottom);
+      for (let step = 0; step <= 96; step++) {
+        const x = -1.75 + step / 96 * 3.5;
+        const bell = Math.exp(-.5 * (x / sigma * 1.5) ** 2);
+        const [px,py] = camera(scene,x,.53 - bell * 1.16,0,placement.x,placement.y,size);
+        ctx.lineTo(px,py);
+      }
+      const [right] = camera(scene,1.75,.53,0,placement.x,placement.y,size);
+      ctx.lineTo(right,bottom); ctx.closePath(); ctx.fill();
+    }
+    const limit = mobile() ? 3200 : 5800;
     for (let index = 0; index < limit; index++) {
       const point = points[index];
-      const t = (point.u - .5) * 3.2;
-      const angle = point.v * tau + t * 3;
-      const waveRadius = .16 + point.w * .14;
-      const wx = t;
-      const wy = Math.sin(t * 2.1 - clock * .09) * .35 + Math.sin(angle + clock * .06) * waveRadius;
-      const wz = Math.cos(angle + clock * .06) * waveRadius;
-      const dx = (point.u - .5) * 3.2;
-      const bell = Math.exp(-.5 * (dx / sigma * 1.7) ** 2);
-      const dy = .48 - bell * (1.05 + point.v * .05) + (point.w - .5) * .055;
-      const dz = (point.v - .5) * .46 * bell;
-      const unfold = smooth(.40 + point.seed * .025, .81 + point.seed * .025, p);
-      const bend = Math.sin(unfold * Math.PI) * .11;
-      const x = mix(wx, dx, unfold) + point.scatterX * (1 - gather) * .18;
-      const y = mix(wy, dy, unfold) + Math.sin(t * 1.6) * bend + point.scatterY * (1 - gather) * .18;
-      const z = mix(wz, dz, unfold) + Math.cos(t * 1.6) * bend;
-      const [px, py, depth] = camera(scene, x, y, z, placement.x, placement.y, size);
-      dot(ctx, px, py, (.45 + point.seed * .8) * depth, .15 + point.w * .61, point.seed > .93 ? '239,235,250' : '178,171,207');
+      const t = (point.u - .5) * 3.5, angle = point.v * tau + t * 2.6 + clock * .05;
+      const radius = .18 + point.w * .12;
+      const wx = t, wy = Math.sin(t * 1.8 - clock * .07) * .34 + Math.sin(angle) * radius;
+      const wz = Math.cos(angle) * radius;
+      const bell = Math.exp(-.5 * (t / sigma * 1.5) ** 2);
+      const dy = .53 - bell * (1.14 + point.v * .07) + (point.w - .5) * .075;
+      const dz = (point.v - .5) * .60 * bell;
+      const individual = smooth(.37 + point.seed * .03,.70 + point.seed * .03,p);
+      const arc = Math.sin(individual * Math.PI) * .16;
+      const x = wx + point.scatterX * (1 - gather) * .2;
+      const y = mix(wy,dy,individual) + Math.sin(t * 1.6) * arc + point.scatterY * (1 - gather) * .2;
+      const z = mix(wz,dz,individual) + Math.cos(t * 1.6) * arc;
+      const [sx,sy,depth] = camera(scene,x,y,z,placement.x,placement.y,size);
+      const [px,py,reflection] = interact(scene,sx,sy);
+      dot(ctx,px,py,(.5 + point.seed * .67) * depth,.22 + point.w * .55 + reflection,'209,219,237');
     }
-    const annotation = smooth(.75, .90, p);
+    // A small fraction fills the distribution rather than outlining a flat bell.
+    if (unfold > .01) {
+      ctx.save(); ctx.globalAlpha = unfold;
+      for (let index = 0; index < limit / 3; index++) {
+        const point = points[index];
+        const x = (point.u - .5) * 3.5;
+        const bell = Math.exp(-.5 * (x / sigma * 1.5) ** 2);
+        const y = .53 - bell * 1.16 * point.v;
+        const [px,py] = camera(scene,x,y,(point.w - .5) * .24,placement.x,placement.y,size);
+        dot(ctx,px,py,.65,.06 + point.v * .19,'179,199,227');
+      }
+      ctx.restore();
+    }
+    const annotation = smooth(.74,.86,p);
     if (annotation > .001) {
       ctx.save(); ctx.globalAlpha = annotation;
-      const [left, bottom] = camera(scene, -1.65, .51, 0, placement.x, placement.y, size);
-      const [right] = camera(scene, 1.65, .51, 0, placement.x, placement.y, size);
-      ctx.strokeStyle = '#77718365'; ctx.lineWidth = .7;
-      ctx.beginPath(); ctx.moveTo(left, bottom); ctx.lineTo(mix(left, right, annotation), bottom); ctx.stroke();
-      ctx.font = `${mobile() ? 7 : 9}px SFMono-Regular,Consolas,monospace`; ctx.fillStyle = '#797487';
-      ctx.textAlign = 'left'; ctx.fillText('POSSIBLE OUTCOMES', left, bottom + 18);
-      ctx.textAlign = 'right'; ctx.fillText('R(t+h) →', right, bottom + 18);
+      const [left,bottom] = camera(scene,-1.8,.57,0,placement.x,placement.y,size);
+      const [right] = camera(scene,1.8,.57,0,placement.x,placement.y,size);
+      ctx.strokeStyle = '#a6b7cc70'; ctx.lineWidth = .7;
+      ctx.beginPath(); ctx.moveTo(left,bottom); ctx.lineTo(right,bottom); ctx.stroke();
+      for (let tick = 0; tick <= 12; tick++) {
+        const x = mix(left,right,tick / 12);
+        ctx.strokeStyle = tick === 6 ? '#a6b7cc88' : '#a6b7cc38';
+        ctx.beginPath(); ctx.moveTo(x,bottom); ctx.lineTo(x,bottom + (tick % 3 ? 3 : 6)); ctx.stroke();
+      }
+      ctx.font = `${mobile() ? 7 : 9}px SFMono-Regular,Consolas,monospace`; ctx.fillStyle = '#9ca9bc';
+      ctx.textAlign = 'left'; ctx.fillText('POSSIBLE OUTCOMES',left,bottom + 20);
+      ctx.textAlign = 'right'; ctx.fillText('R(t+h) →',right,bottom + 20);
       const cx = scene.width * placement.x;
-      ctx.setLineDash([2, 6]); ctx.strokeStyle = '#77718340';
-      ctx.beginPath(); ctx.moveTo(cx, scene.height * placement.y - size * .65); ctx.lineTo(cx, bottom); ctx.stroke();
+      ctx.setLineDash([2,6]); ctx.strokeStyle = '#a6b7cc38';
+      ctx.beginPath(); ctx.moveTo(cx,scene.height * placement.y - size * .72); ctx.lineTo(cx,bottom); ctx.stroke();
+      ctx.setLineDash([]);
+      // Cursor inspection describes this conceptual shape without inventing a market statistic.
+      const pointerX = (scene.pointer.x + 1) * scene.width / 2;
+      const pointerY = (scene.pointer.y + 1) * scene.height / 2;
+      if (scene.pointer.influence > .02 && pointerX > left && pointerX < right && pointerY > bottom - size * 1.6 && pointerY < bottom + 45) {
+        const t = clamp((pointerX - cx) / size,-1.75,1.75);
+        const bell = Math.exp(-.5 * (t / sigma * 1.5) ** 2);
+        const y = scene.height * placement.y + (.53 - bell * 1.16) * size;
+        ctx.globalAlpha = annotation * scene.pointer.influence;
+        ctx.strokeStyle = '#c9e1f699';
+        ctx.beginPath(); ctx.moveTo(pointerX,bottom); ctx.lineTo(pointerX,y); ctx.stroke();
+        tracer(ctx,pointerX,y,.95,1.15);
+        ctx.fillStyle = '#d2e3f2'; ctx.textAlign = 'center';
+        ctx.fillText(t < -.45 ? '左尾 / LOWER' : t > .45 ? '右尾 / UPPER' : '中心 / CENTER',clamp(pointerX,left + 45,right - 45),bottom + 39);
+      }
       ctx.restore();
     }
   }
   function drawGamma(scene) {
     const { ctx, width, height } = scene;
-    const p = reduced.matches ? .75 : scene.progress;
+    const p = staticComposition() ? .75 : scene.progress;
     const compact = mobile();
     const startX = width * (compact ? .08 : .55), startY = height * (compact ? .83 : .25);
     const endX = width * (compact ? .93 : .94), endY = height * (compact ? .50 : .82);
@@ -484,6 +891,19 @@
     ctx.save();
     const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
     gradient.addColorStop(0, '#a6a6c000'); gradient.addColorStop(.4, '#bbbbd060'); gradient.addColorStop(.7, '#eeebffba'); gradient.addColorStop(1, '#c8c5dc00');
+    for (let component = 0; component < 2; component++) {
+      ctx.strokeStyle = component === 0 ? '#a9cde755' : '#b7bedb36'; ctx.lineWidth = .65;
+      ctx.setLineDash(component === 0 ? [5,7] : [1,5]);
+      ctx.beginPath();
+      for (let segment = 0; segment <= 180; segment++) {
+        const u = segment / 180 * amount;
+        const wave = Math.sin(u * (component === 0 ? 13 : 42) - clock * (component === 0 ? .22 : .65)) * (component === 0 ? .28 : 1) * amplitude * Math.sin(u * Math.PI) ** 1.3;
+        const [x,y] = interact(scene,startX + vx * u + nx * wave,startY + vy * u + ny * wave);
+        if (!segment) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
     ctx.strokeStyle = gradient;
     for (let line = 0; line < 31; line++) {
       const offset = (line - 15) * .42;
@@ -507,7 +927,8 @@
       const u = point.u * amount;
       const wave = (Math.sin(u * 42 - clock * .65) + Math.sin(u * 13 - clock * .22) * .28) * amplitude * Math.sin(u * Math.PI) ** 1.3;
       const x = startX + vx * u + nx * wave, y = startY + vy * u + ny * wave;
-      dot(ctx, x, y, point.seed > .92 ? 1.4 : .7, point.seed * .6, '216,213,235');
+      const [px,py,reflection] = interact(scene,x,y);
+      dot(ctx, px, py, point.seed > .92 ? 1.4 : .7, point.seed * .6 + reflection, '216,213,235');
     }
     const annotation = smooth(.55, .84, p);
     if (annotation > .001) {
@@ -527,11 +948,25 @@
   }
   function drawOmega(scene) {
     const { ctx } = scene;
-    const p = reduced.matches ? .65 : scene.progress;
+    const p = staticComposition() ? .65 : scene.progress;
     const placement = position(scene);
-    placement.y = mobile() ? (reduced.matches ? .47 : .70) : .53;
+    placement.y = mobile() ? (staticComposition() ? .47 : .70) : .53;
     const size = placement.scale * 1.05;
     atmosphere(scene, placement.x, placement.y, size * 1.8, .038, [178,181,197]);
+    ctx.save(); ctx.lineWidth = .6;
+    for (let filament = 0; filament < 9; filament++) {
+      ctx.strokeStyle = filament === 0 || filament === 8 ? '#b6cddd2b' : '#b6cddd0e';
+      ctx.beginPath();
+      for (let step = 0; step <= 120; step++) {
+        const u = .3 + step / 120 * (tau - .6);
+        const radius = .95 + (filament / 8 - .5) * .12 + Math.sin(u * 2 + clock * .2) * .012;
+        const [px,py] = camera(scene,Math.sin(u) * radius,-Math.cos(u) * radius * .63,0,placement.x,placement.y,size);
+        const [x,y] = interact(scene,px,py);
+        if (!step) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
     const limit = mobile() ? 1800 : 3300;
     for (let index = 0; index < limit; index++) {
       const point = points[index];
@@ -542,9 +977,16 @@
       const x = Math.sin(u) * radius;
       const y = -Math.cos(u) * radius * .63;
       const z = (point.w - .5) * .30;
-      const [px, py, depth] = camera(scene, x, y, z, placement.x, placement.y, size);
+      const [sx, sy, depth] = camera(scene, x, y, z, placement.x, placement.y, size);
+      const [px,py,reflection] = interact(scene,sx,sy);
       const fade = Math.sin(travel * Math.PI) ** opening;
-      dot(ctx, px, py, (.4 + point.seed * .55) * depth, fade * (.12 + point.seed * .48), '171,176,193');
+      dot(ctx, px, py, (.4 + point.seed * .55) * depth, fade * (.12 + point.seed * .48) + reflection, '171,176,193');
+    }
+    for (let highlight = 0; highlight < 3; highlight++) {
+      const travel = (clock * .025 + highlight / 3) % 1, u = .3 + travel * (tau - .6);
+      const [px,py] = camera(scene,Math.sin(u) * .95,-Math.cos(u) * .95 * .63,0,placement.x,placement.y,size);
+      const [x,y] = interact(scene,px,py);
+      tracer(ctx,x,y,Math.sin(travel * Math.PI) * .8,.7);
     }
     ctx.save();
     ctx.fillStyle = '#bbbbcb60'; ctx.font = `italic ${mobile() ? 43 : 65}px Georgia,serif`; ctx.textAlign = 'center';
@@ -555,32 +997,55 @@
   function render(timestamp) {
     frame = 0;
     if (document.hidden) return;
+    const precise = dirty || Math.abs(fieldMorph - Number(fieldMode === 'focus')) > .0001 || scenes.some(scene => scene.active && (scene.pointer.active || scene.pulses.length || Math.abs(scene.progress - scene.targetProgress) > .0001));
+    const interval = 1000 / (precise ? 60 : 30);
+    if (lastFrame && timestamp - lastFrame < interval - 1) { frame = requestAnimationFrame(render); return; }
     const dt = lastFrame ? Math.min((timestamp - lastFrame) / 1000, .05) : 1 / 60;
     lastFrame = timestamp;
     if (dirty) { updateScroll(); dirty = false; }
     const animated = !reduced.matches && !dialog.open;
-    if (animated) clock += dt;
-    heroPointer.x = damp(heroPointer.x, reduced.matches ? 0 : heroPointer.targetX, .24, dt);
-    heroPointer.y = damp(heroPointer.y, reduced.matches ? 0 : heroPointer.targetY, .24, dt);
-    heroPointer.influence = damp(heroPointer.influence, heroPointer.active && animated ? 1 : 0, .3, dt);
+    const ambient = animated && !motionPaused;
+    if (ambient) clock += dt;
+    if (animated) interactionClock += dt;
+    const targetMorph = Number(fieldMode === 'focus');
+    fieldMorph = reduced.matches ? targetMorph : damp(fieldMorph,targetMorph,.23,dt);
+    const targetFactor = selectedFactor;
     distributionWidth = reduced.matches ? typeWidths[selectedType] : damp(distributionWidth, typeWidths[selectedType], .18, dt);
     factorWeights.forEach((weight, index) => {
-      factorWeights[index] = reduced.matches ? Number(index === selectedFactor) : damp(weight, Number(index === selectedFactor), .15, dt);
+      factorWeights[index] = reduced.matches ? Number(index === targetFactor) : damp(weight, Number(index === targetFactor), .15, dt);
     });
     for (const scene of scenes) {
-      if (!scene.active) continue;
-      scene.progress = animated ? damp(scene.progress, scene.targetProgress, .085, dt) : scene.targetProgress;
+      if (!scene.active) { scene.pulses.length = 0; scene.ripples.length = 0; scene.pointer.active = false; scene.hoverFactor = -1; continue; }
+      const pointer = scene.pointer;
+      pointer.x = damp(pointer.x, reduced.matches ? 0 : pointer.targetX, .20, dt);
+      pointer.y = damp(pointer.y, reduced.matches ? 0 : pointer.targetY, .20, dt);
+      pointer.influence = damp(pointer.influence, pointer.active && animated ? 1 : 0, .24, dt);
+      scene.pulses = reduced.matches ? [] : scene.pulses.filter(pulse => interactionClock - pulse.start < 1.8);
+      scene.ripples = scene.pulses.map(pulse => {
+        const age = (interactionClock - pulse.start) / 1.8;
+        return { x: pulse.x * scene.width, y: pulse.y * scene.height, radius: 8 + age * Math.min(scene.width,scene.height) * .85, width: 22 + age * 22, opacity: (1 - age) ** 2 };
+      });
+      scene.progress = animated ? damp(scene.progress, scene.targetProgress, .055, dt) : scene.targetProgress;
       scene.entrance = animated ? damp(scene.entrance, scene.targetEntrance, .12, dt) : scene.targetEntrance;
       if (scene.kind === 'hero') {
-        scene.element.style.setProperty('--hero-scroll', smooth(0, .75, scene.progress).toFixed(4));
+        scene.element.style.setProperty('--hero-scroll', scene.progress.toFixed(4));
+        scene.element.style.setProperty('--hero-copy-opacity', (1 - smooth(.02,.43,scene.progress)).toFixed(4));
+        scene.element.style.setProperty('--hero-caption-opacity', (smooth(.44,.72,scene.progress) * (1 - smooth(.92,1,scene.progress))).toFixed(4));
+        const copyHidden = !readingFlow() && scene.progress > .43;
+        const consoleHidden = !readingFlow() && scene.progress > .36;
+        heroCopy.inert = copyHidden; heroCopy.setAttribute('aria-hidden',String(copyHidden));
+        fieldConsole.inert = consoleHidden; fieldConsole.setAttribute('aria-hidden',String(consoleHidden));
+        heroFooter.inert = !readingFlow() && scene.progress > .76;
       } else if (scene.appliedProgress !== scene.progress || scene.appliedEntrance !== scene.entrance) {
         applyChapter(scene);
         scene.appliedProgress = scene.progress; scene.appliedEntrance = scene.entrance;
       }
       scene.ctx.clearRect(0, 0, scene.width, scene.height);
       drawFunctions[scene.kind](scene);
+      drawRipples(scene);
     }
-    if (animated && scenes.some(scene => scene.active)) frame = requestAnimationFrame(render);
+    const settling = Math.abs(fieldMorph - targetMorph) > .0001 || Math.abs(distributionWidth - typeWidths[selectedType]) > .0001 || factorWeights.some((weight,index) => Math.abs(weight - Number(index === targetFactor)) > .0001) || scenes.some(scene => scene.active && (scene.pulses.length || Math.abs(scene.pointer.x - scene.pointer.targetX) > .0001 || Math.abs(scene.pointer.y - scene.pointer.targetY) > .0001 || Math.abs(scene.pointer.influence - Number(scene.pointer.active)) > .0001 || Math.abs(scene.progress - scene.targetProgress) > .0001 || Math.abs(scene.entrance - scene.targetEntrance) > .0001));
+    if (animated && (ambient || settling) && scenes.some(scene => scene.active)) frame = requestAnimationFrame(render);
     else lastFrame = 0;
   }
   schedule = (needsUpdate = false) => {
@@ -593,7 +1058,19 @@
     if (document.hidden && frame) { cancelAnimationFrame(frame); frame = 0; }
     lastFrame = 0; schedule(true);
   });
+  if ('ResizeObserver' in window) {
+    const main = document.querySelector('main');
+    const layoutObserver = new ResizeObserver(entries => {
+      if (entries.some(entry => entry.target !== main)) scenes.forEach(setSize);
+      layoutDirty = true; schedule(true);
+    });
+    layoutObserver.observe(main);
+    document.querySelectorAll('.chapter-detail .scene-copy').forEach(element => layoutObserver.observe(element));
+    layoutObserver.observe(heroCopy);
+  }
+  document.fonts?.ready.then(() => { layoutDirty = true; syncIndicators(); schedule(true); });
   reduced.addEventListener('change', syncMotion);
+  compactHeight.addEventListener('change', syncMotion);
   syncMotion();
   schedule(true);
 })();
