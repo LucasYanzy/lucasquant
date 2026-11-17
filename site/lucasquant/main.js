@@ -261,11 +261,19 @@
     pulses: [], ripples: [], nodes: [], hoverFactor: -1,
   })).filter(scene => scene.ctx);
   if (!scenes.length) return;
+  scenes.filter(scene => scene.detail).forEach(scene => {
+    scene.cue = scene.element.querySelector('.chapter-cue');
+    scene.inspection = scene.element.querySelector('.inspection-controls');
+    scene.interlude = document.createElement('div'); scene.interlude.className = 'particle-interlude'; scene.interlude.hidden = true;
+    scene.interludeStage = document.createElement('div'); scene.interludeStage.className = 'particle-interlude-stage';
+    scene.interlude.append(scene.interludeStage); scene.detail.before(scene.interlude);
+    if (matchMedia('(pointer:coarse)').matches) scene.inspection.querySelector('.inspection-hint').textContent = '轻触粒子 · 继续滑动探索';
+  });
   const heroPointer = scenes[0].pointer;
   let interactionClock = 0;
   const factorButtons = [...document.querySelectorAll('[data-factor]')];
   const hitFactor = (scene, x, y) => {
-    if (scene.kind !== 'alpha' || !staticComposition() && scene.progress <= .74) return -1;
+    if (scene.kind !== 'alpha' || !staticComposition() && scene.progress <= .80) return -1;
     const label = scene.nodes.findIndex(node => node.label && x >= node.label.left && x <= node.label.right && y >= node.label.top && y <= node.label.bottom);
     if (label >= 0) return label;
     let nearest = mobile() ? 12 : 9, factor = -1;
@@ -338,12 +346,38 @@
     const [kind, progress] = button.dataset.seek.split(':');
     const scene = scenes.find(item => item.kind === kind);
     if (!scene) return;
-    const top = scene.start - headerHeight + scene.travel * Number(progress);
+    const point = Number(progress);
+    let top = scene.start - headerHeight + scene.travel * point;
+    if (scene.compactInterlude) {
+      top = point > .8
+        ? scene.detail.getBoundingClientRect().top + scrollY - headerHeight - 20
+        : scene.artStart - headerHeight + scene.artTravel * point;
+    }
     window.scrollTo({ top, behavior: reduced.matches ? 'instant' : 'smooth' });
+    if (button.closest('.inspection-controls') && point > .8) {
+      const focusDetail = () => {
+        const active = document.activeElement;
+        if ((active === button || active === document.body) && scene.detail.getAttribute('aria-hidden') === 'false') {
+          const heading = scene.detail.querySelector('h3'); heading.tabIndex = -1; heading.focus({ preventScroll:true });
+        }
+        removeEventListener('scrollend',focusDetail);
+      };
+      addEventListener('scrollend',focusDetail,{ once:true }); setTimeout(focusDetail,1400);
+    }
   }));
   const syncMotion = () => {
     document.body.classList.toggle('motion-ready', !reduced.matches && !compactHeight.matches);
-    scenes.forEach(scene => { scene.appliedProgress = null; });
+    scenes.forEach(scene => {
+      scene.appliedProgress = null;
+      if (!scene.interlude) return;
+      const compactInterlude = compactHeight.matches && !reduced.matches;
+      if (compactInterlude && !scene.compactInterlude) scene.interludeStage.append(scene.canvas,scene.cue,scene.inspection);
+      else if (!compactInterlude && scene.compactInterlude) {
+        scene.stage.prepend(scene.canvas); scene.intro.before(scene.cue,scene.inspection);
+      }
+      scene.compactInterlude = compactInterlude; scene.interlude.hidden = !compactInterlude;
+      scene.element.classList.toggle('has-interlude',compactInterlude);
+    });
     if (reduced.matches) document.querySelectorAll('[data-reveal]').forEach(element => element.classList.add('revealed'));
     resize();
   };
@@ -376,7 +410,9 @@
       scene.start = scene.element.getBoundingClientRect().top + scrollY;
       scene.total = scene.element.offsetHeight;
       scene.travel = Math.max(1, scene.total - scene.stage.offsetHeight);
-      scene.artStart = scene.canvas.getBoundingClientRect().top + scrollY;
+      const art = scene.compactInterlude ? scene.interlude : scene.canvas;
+      scene.artStart = art.getBoundingClientRect().top + scrollY;
+      scene.artTravel = scene.compactInterlude ? Math.max(1,scene.interlude.offsetHeight - scene.interludeStage.offsetHeight) : 0;
     });
     layoutDirty = false;
   }
@@ -393,7 +429,7 @@
       scene.targetProgress = clamp((header - bounds.top) / scene.travel);
       if (readingFlow() && !reduced.matches) {
         // Short windows retain a readable document and scrub the artwork as it crosses the viewport.
-        scene.targetProgress = scene.kind === 'hero'
+        scene.targetProgress = scene.compactInterlude ? clamp((scrollY + header - scene.artStart) / scene.artTravel) : scene.kind === 'hero'
           ? clamp((header - bounds.top) / Math.max(1,scene.total - (pageHeight - header)))
           : clamp((scrollY + pageHeight * .85 - scene.artStart) / (pageHeight * .70 + scene.height * .65));
       }
@@ -421,12 +457,17 @@
     const set = (name, value) => element.style.setProperty(name, value);
     set('--progress', p.toFixed(4));
     set('--art-opacity', mix(.48, 1, scene.entrance).toFixed(4));
-    set('--detail-visibility', p > .60 ? 'visible' : 'hidden');
+    set('--detail-visibility', p > .70 ? 'visible' : 'hidden');
     set('--object-opacity', smooth(.76, .88, p).toFixed(4));
-    set('--cue-opacity', (smooth(.43, .49, p) * (1 - smooth(.55, .61, p))).toFixed(4));
-    set('--word-opacity', mix(.7, .15, smooth(.23, .73, p)).toFixed(4));
+    const inspection = future || reduced.matches ? 0 : inspectionAmount(p);
+    set('--inspection', inspection.toFixed(4));
+    set('--inspection-opacity', (smooth(.38,.43,p) * (1 - smooth(.59,.65,p))).toFixed(4));
+    set('--inspection-visibility', p > .38 && p < .65 && !reduced.matches ? 'visible' : 'hidden');
+    set('--cue-opacity', (smooth(.43, .47, p) * (1 - smooth(.59, .65, p))).toFixed(4));
+    set('--word-opacity', (mix(.7, .15, smooth(.23, .73, p)) * (1 - inspection * .95)).toFixed(4));
     set('--word-x', `${-smooth(0, 1, p) * 15}px`);
     element.dataset.phase = future ? 'future' : p < .30 ? 'gather' : p < .70 ? 'reveal' : 'detail';
+    element.dataset.inspection = inspection.toFixed(4);
     element.dataset.progress = p.toFixed(4);
     element.dataset.targetProgress = scene.targetProgress.toFixed(4);
     const staticMode = readingFlow();
@@ -436,7 +477,7 @@
       item.style.setProperty('--item-y', `${-exit * (12 + index * 2)}px`);
     });
     scene.detailItems.forEach((item, index) => {
-      const enter = staticMode ? 1 : smooth(.60 + index * .010, .70 + index * .010, p);
+      const enter = staticMode ? 1 : smooth(.70 + index * .010, .77 + index * .010, p);
       item.style.setProperty('--item-opacity', enter.toFixed(4));
       item.style.setProperty('--item-y', `${(1 - enter) * 18}px`);
       item.inert = !staticMode && enter < .12;
@@ -445,9 +486,13 @@
     scene.intro.inert = introHidden;
     scene.intro.setAttribute('aria-hidden', String(introHidden));
     if (scene.detail) {
-      const detailHidden = !staticMode && p < .60;
+      const detailHidden = !staticMode && p < .70;
       scene.detail.inert = detailHidden;
       scene.detail.setAttribute('aria-hidden', String(detailHidden));
+    }
+    if (scene.inspection) {
+      const hidden = reduced.matches || p <= .38 || p >= .65;
+      scene.inspection.inert = hidden; scene.inspection.setAttribute('aria-hidden',String(hidden));
     }
     const step = p < .30 ? 0 : p < .70 ? 1 : 2;
     scene.steps.forEach((button, index) => {
@@ -462,6 +507,7 @@
   function position(scene, detail = 0) {
     const compact = mobile();
     const staticLayout = !document.body.classList.contains('motion-ready');
+    if (scene.compactInterlude) return { x:compact ? .5 : .715, y:.50, scale:Math.min(scene.width * .28,scene.height * .30) };
     if (compact && staticLayout) return { x: .5, y: .47, scale: Math.min(scene.width * .28, scene.height * .32) };
     const base = {
       x: (compact ? .51 : .715) + scene.pointer.x * .008, y: (compact ? .67 : .50) + scene.pointer.y * .006,
@@ -476,6 +522,13 @@
       y: mix(base.y, (top + space * .45) / scene.height, amount),
       scale: mix(base.scale, Math.min(scene.width * .28, space * .35), amount),
     };
+  }
+  function inspectionAmount(progress) {
+    return smooth(.22,.38,progress) * (1 - smooth(.56,.78,progress));
+  }
+  function inspectionPlacement(scene, placement, amount) {
+    placement.x = mix(placement.x,.5 + scene.pointer.x * .008,amount);
+    placement.y = mix(placement.y,scene.compactInterlude ? .52 : .55,amount);
   }
   function atmosphere(scene, x, y, radius, opacity = .08, tint = [186, 188, 211]) {
     const { ctx, width, height } = scene;
@@ -678,13 +731,14 @@
   function drawAlpha(scene) {
     const { ctx } = scene;
     const p = staticComposition() ? .86 : scene.progress;
-    const gather = smooth(0,.19,p), resolve = smooth(.36,.72,p);
-    const closeup = smooth(.18,.37,p) * (1 - smooth(.49,.72,p));
-    const placement = position(scene,smooth(.58,.78,p));
+    const gather = smooth(0,.19,p), resolve = smooth(.56,.81,p);
+    const closeup = inspectionAmount(p);
+    const placement = position(scene,smooth(.66,.84,p));
     const compact = mobile();
     placement.x = compact ? mix(placement.x,.405,resolve) : mix(placement.x,.675,resolve);
-    if (!compact) placement.x = mix(placement.x,.56,closeup);
-    const size = placement.scale * (1 + closeup * .35) * mix(1,compact ? .96 : .94,resolve);
+    inspectionPlacement(scene,placement,closeup);
+    const studySize = Math.min(scene.width * (compact ? .43 : .32),scene.height * (scene.compactInterlude ? .30 : .36));
+    const size = mix(placement.scale * mix(1,compact ? .96 : .94,resolve),studySize,closeup);
     const cx = scene.width * placement.x, cy = scene.height * placement.y;
     const yaw = .23 + clock * .037 + smooth(0,.72,p) * .8;
     const tilt = mix(.12,.38,resolve) + closeup * .18;
@@ -700,7 +754,23 @@
       return [px,py,z,projected[2],reflection];
     };
     atmosphere(scene,placement.x,placement.y,size * 1.6,.045,[160,190,218]);
-    const annotation = smooth(.70,.83,p);
+    // The original orbital study remains a distinct, interactive middle scene.
+    ctx.save(); ctx.lineWidth = .65;
+    for (let orbit = 0; orbit < 3; orbit++) {
+      const angle = orbit * Math.PI / 3 + clock * .025 + p * .30;
+      let previous;
+      for (let step = 0; step <= 100; step++) {
+        const u = step / 100 * tau, x = Math.cos(u) * 1.03, y = Math.sin(u) * .27;
+        const [px,py,z] = project([x * Math.cos(angle) - y * Math.sin(angle),x * Math.sin(angle) + y * Math.cos(angle),Math.sin(u) * .88]);
+        if (previous) {
+          ctx.strokeStyle = ink('175,207,231',closeup * (1 - resolve) * (.045 + clamp((1 - z) / 2) * .12));
+          ctx.beginPath(); ctx.moveTo(previous[0],previous[1]); ctx.lineTo(px,py); ctx.stroke();
+        }
+        previous = [px,py];
+      }
+    }
+    ctx.restore();
+    const annotation = smooth(.78,.85,p);
     const labelX = Math.min(cx + size * 1.15,scene.width - (compact ? 78 : 124));
     scene.nodes = [];
     ctx.save();
@@ -750,7 +820,7 @@
     const buffer = scene.alphaBuffer;
     for (let index = 0; index < limit; index++) {
       const sampleIndex = Math.floor(index * particleCount / limit), point = points[sampleIndex], path = alphaSamples[sampleIndex];
-      const delayed = smooth(.36 + point.seed * .018,.70 + point.seed * .018,p);
+      const delayed = smooth(.56 + point.seed * .018,.79 + point.seed * .018,p);
       const unit = sphereArc(path.from,path.to,delayed);
       const shell = mix(Math.hypot(point.x,point.y,point.z),.975 + point.w * .025,delayed);
       const drift = 1 - gather;
@@ -775,7 +845,7 @@
     if (annotation > .001) {
       ctx.save(); ctx.globalAlpha = annotation; ctx.textAlign = 'center';
       const captionX = compact ? scene.width * .5 : cx + size * .1;
-      const captionY = Math.min(cy + size * 1.16 + 16,scene.height - 73);
+      const captionY = Math.min(cy + size * 1.16 + 16,scene.height - (scene.compactInterlude ? 36 : 73));
       ctx.font = `${compact ? 9 : 11}px -apple-system,BlinkMacSystemFont,sans-serif`; ctx.fillStyle = '#b4c5d7';
       ctx.fillText('六条信号带，六个观察视角。',captionX,captionY);
       ctx.font = `${compact ? 7 : 9}px -apple-system,BlinkMacSystemFont,sans-serif`; ctx.fillStyle = '#6f8195';
@@ -786,11 +856,12 @@
   function drawBeta(scene) {
     const { ctx } = scene;
     const p = staticComposition() ? .86 : scene.progress;
-    const gather = smooth(0,.20,p), unfold = smooth(.37,.73,p);
-    const closeup = smooth(.18,.37,p) * (1 - smooth(.49,.72,p));
-    const placement = position(scene,smooth(.58,.78,p));
-    if (!mobile()) placement.x = mix(placement.x,.56,closeup);
-    const size = Math.min(placement.scale * .91,scene.width * (mobile() ? .28 : .155)) * (1 + closeup * .42);
+    const gather = smooth(0,.20,p), unfold = smooth(.56,.81,p);
+    const closeup = inspectionAmount(p);
+    const placement = position(scene,smooth(.66,.84,p));
+    inspectionPlacement(scene,placement,closeup);
+    const studySize = Math.min(scene.width * (mobile() ? .25 : .22),scene.height * .28);
+    const size = mix(Math.min(placement.scale * .91,scene.width * (mobile() ? .28 : .155)),studySize,closeup);
     atmosphere(scene,placement.x,placement.y,size * 2,.06,[200,211,235]);
     const sigma = distributionWidth;
     if (unfold > .001) {
@@ -812,14 +883,15 @@
     const limit = mobile() ? 3200 : 5800;
     for (let index = 0; index < limit; index++) {
       const point = points[index];
-      const t = (point.u - .5) * 3.5, angle = point.v * tau + t * 2.6 + clock * .05;
+      const studyTime = clock + smooth(.22,.81,p) * 4.5;
+      const t = (point.u - .5) * 3.5, angle = point.v * tau + t * 2.6 + studyTime * .12;
       const radius = .18 + point.w * .12;
-      const wx = t, wy = Math.sin(t * 1.8 - clock * .07) * .34 + Math.sin(angle) * radius;
+      const wx = t, wy = Math.sin(t * 1.8 - studyTime * .17) * .34 + Math.sin(angle) * radius;
       const wz = Math.cos(angle) * radius;
       const bell = Math.exp(-.5 * (t / sigma * 1.5) ** 2);
       const dy = .53 - bell * (1.14 + point.v * .07) + (point.w - .5) * .075;
       const dz = (point.v - .5) * .60 * bell;
-      const individual = smooth(.37 + point.seed * .03,.70 + point.seed * .03,p);
+      const individual = smooth(.56 + point.seed * .018,.79 + point.seed * .018,p);
       const arc = Math.sin(individual * Math.PI) * .16;
       const x = wx + point.scatterX * (1 - gather) * .2;
       const y = mix(wy,dy,individual) + Math.sin(t * 1.6) * arc + point.scatterY * (1 - gather) * .2;
@@ -841,7 +913,7 @@
       }
       ctx.restore();
     }
-    const annotation = smooth(.74,.86,p);
+    const annotation = smooth(.78,.86,p);
     if (annotation > .001) {
       ctx.save(); ctx.globalAlpha = annotation;
       const [left,bottom] = camera(scene,-1.8,.57,0,placement.x,placement.y,size);
